@@ -6,44 +6,64 @@
 #include <stdio.h>
 
 #define MYPORT 7270
+#define MAXUSERS 5
+#define BUFFERSIZE 1025
+
+/* TODO
+ * add multpiple client handling (concurency)
+ * log client IP/port
+ * normal shut down handling
+ * handle partial reads/writes
+ * add signal handler to close socket
+*/
 
 int main() {
-    int buffer[1025] = {0};
-    int s = socket(AF_INET6, SOCK_STREAM, 0), newSocket; // creating socket 
-    if (s < 0) {
+
+    // add separate function for readability
+    char buffer[BUFFERSIZE] = {0};
+    int sock = socket(AF_INET6, SOCK_STREAM, 0), newSock; // creating socket 
+    if (sock < 0) {
         perror("socket");
         return 1;
     }    
+    
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    struct sockaddr_in6 sin6; // ipv6 socket address
-
-    memset(&sin6, 0, sizeof(sin6));
-    sin6.sin6_family = AF_INET6; // specifies family
-    sin6.sin6_addr = in6addr_any; // bind to any local address
-    sin6.sin6_port = htons(MYPORT);
+    struct sockaddr_in6 clientAddr, serverAddr; // ipv6 socket address
+    socklen_t clientAddrLen = sizeof(clientAddr), serverAddrLen = sizeof(serverAddr);
+    
+    memset(&serverAddr, 0, serverAddrLen);
+    serverAddr.sin6_family = AF_INET6; // specifies family
+    serverAddr.sin6_addr = in6addr_any; // bind to any local address
+    serverAddr.sin6_port = htons(MYPORT);
     
     // binds local name to the socket
-    if (bind(s, (struct sockaddr*) &sin6, sizeof sin6) < 0) {
+    if (bind(sock, (struct sockaddr*) &serverAddr, serverAddrLen) < 0) {
         perror("bind");
         return 1;
     }    
 
-    if (listen(s, 5) < 0) {
+    // up to 5 users TODO: add concurency as of right now it receives one user and then dies.
+    if (listen(sock, MAXUSERS) < 0) {
         perror("listen");
         return 1;
     }
 
-    socklen_t addrLen = sizeof(sin6);
-
-    if ((newSocket = accept(s, (struct sockaddr*) &sin6, &addrLen)) < 0) {
+    // replace with a loop and threading/forking for multiple clients
+    if ((newSock = accept(sock, (struct sockaddr*) &clientAddr, &clientAddrLen)) < 0) {
         perror("accept");
         return 1;
     }
 
-    message = read(newSocket, buffer, 1024);
-    printf("\s\n", message);
+    // move to a separate function
+    int message;
+    while ((message = read(newSock, buffer, BUFFERSIZE - 1)) > 0) {
+        buffer[message] = '\0';
+        printf("Client: %s", buffer);
+        write(newSock, "Server has received your message!\n", 34);
+    };
 
-    close(newSocket);
-    close(s);
-    // printf("everything works damn\n");
+    close(newSock);
+    close(sock);
 }
