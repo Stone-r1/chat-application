@@ -13,7 +13,7 @@
 #define BUFFERSIZE 1024
 
 /* TODO
- * log client IP/port
+ * log client IP/port - I think done but not sure yet
  * normal shut down handling
  * handle partial reads/writes
 */
@@ -82,6 +82,7 @@ int main(int args, char* argv[]) {
             printf("IP address: %s\n", ipStr);
             printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
 
+            // Establishing concurency
             pid_t pid = fork();
             if (pid < 0) {
                 perror("fork");
