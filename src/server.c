@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <arpa/inet.h>
 #include <signal.h>
 
 #define MYPORT 7270
@@ -44,7 +45,7 @@ void handleClient(int clientSocket) {
     }
 }
 
-int main() {
+int main(int args, char* argv[]) {
     int sock = createSocket(), newSock;
     signal(SIGCHLD, SIG_IGN); // automatically clean up 'zombie' processes
     
@@ -67,11 +68,19 @@ int main() {
         return 1;
     } else {
         while (1) {
+            // accept the user and create a socket for them
             int clientSocket = accept(sock, (struct sockaddr*) &clientAddr, &clientAddrLen);
             if (clientSocket < 0) {
                 perror("accept");
                 return 1;
             }
+
+            // after accepting I can get IP/port and info about machine
+            getpeername(clientSocket, (struct sockaddr*) &clientAddr, &clientAddrLen);
+            char ipStr[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, &clientAddr.sin6_addr, ipStr, sizeof(ipStr));
+            printf("IP address: %s\n", ipStr);
+            printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
 
             pid_t pid = fork();
             if (pid < 0) {
