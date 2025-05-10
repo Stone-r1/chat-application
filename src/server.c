@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <sys/select.h>
 
 #define MYPORT 7270
 #define MAXUSERS 5
@@ -18,20 +19,50 @@
  * handle partial reads/writes
 */
 
-int createSocket() {
-    int sock = socket(AF_INET6, SOCK_STREAM, 0);
+volatile sig_atomic_t running = 1;
+
+void handleShutdown(int signal) {
+    running = 0;
+}
+
+struct SocketWrapper {
+    int sock;
+    struct sockaddr_in6 addr;
+    int family;
+};
+
+int createSocket(int family) {
+    int sock = socket(family, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("socket");
-        return 1;
+        return -1;
     }
     return sock;
 }
 
-void setupServerDetails(struct sockaddr_in6* addr) {
-    memset(addr, 0, sizeof(struct sockaddr_in6));
-    addr -> sin6_family = AF_INET6; // specifies family
-    addr -> sin6_addr = in6addr_any; // bind to any local address
-    addr -> sin6_port = htons(MYPORT);    
+void setupServerDetails(SocketWrapper* socketWrapper) {
+
+    memset(&socketWrapper -> addr, 0, sizeof(socketWrapper -> addr));
+    socketWrapper -> addr.sin6_family = socketWrapper -> family; // specifies family
+
+    // bind to any local address
+    if (socketWrapper -> family == AF_INET6) {
+        socketWrapper -> addr.sin6_addr = in6addr_any; // IPv6 case
+    } else {
+        // IMPORTANT: in6addr_any is for IPv6, cannot cast directly to IPv4
+        struct in_addr ipv4_any = {INADDR_ANY};
+        memcpy(&socketWrapper -> addr.sin6_addr, &ipv4_any, sizeof(ipv4_any));
+        // socketWrapper -> addr.sin6_addr = *((struct in_addr*) &in6addr_any); // IPv4 case
+    }
+    socketWrapper -> addr.sin6_port = htons(MYPORT);
+}
+
+int bindSocket(SocketWrapper* socketWrapper) {
+    if (bind(socketWrapper -> sock, (struct sockaddr*) &socketWrapper -> addr, sizeof(socketWrapper -> addr)) < 0) {
+        perror("bind");
+        return -1;
+    }
+    return 0;
 }
 
 void handleClient(int clientSocket) {
@@ -45,57 +76,100 @@ void handleClient(int clientSocket) {
     }
 }
 
+// Prepares the set of sockets to be monitored
+void selectSockets(fd_set* readfds, SocketWrapper* ipv4Socket, SocketWrapper* ipv6Socket) {
+    FD_ZERO(readfds); // clean
+    FD_SET(ipv4Socket -> sock, readfds); // monitor for events
+    FD_SET(ipv6Socket -> sock, readfds); // monitor for events
+}
+
+int acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
+    struct sockaddr_in6 clientAddr;
+    socklen_t clientAddrLen = sizeof(clientAddr);
+
+    if (FD_ISSET(socketWrapper -> sock, readfds)) {
+        int clientSocket = accept(socketWrapper -> sock, (struct sockaddr*) &clientAddr, &clientAddrLen);
+        if (clientSocket < 0) {
+            perror("accept");
+            return 1;
+        }
+
+        char clientIP[INET6_ADDRSTRLEN];
+        inet_ntop(socketWrapper -> family, &clientAddr.sin6_addr, clientIP, sizeof(clientIP));
+        // ntohs -> converts the port number from network byte order to host byte order 
+        printf("IP address: %s\n", ipStr);
+        printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
+
+        handleClient(clientSocket);
+        close(clientSocket);
+    }
+
+    return 0;
+}
+
 int main(int args, char* argv[]) {
-    int sock = createSocket(), newSock;
-    signal(SIGCHLD, SIG_IGN); // automatically clean up 'zombie' processes
+    signal(SIGINT, handleShutdown); // signal handler for proper shutdown
+   
+    SocketWrapper ipv6Socket = {createSocket(AF_INET6), {}, AF_INET6};
+    SocketWrapper ipv4Socket = {createSocket(AF_INET), {}, AF_INET};
+
+    if (ipv6Socket.sock < 0 || ipv4Socket.sock < 0) {
+        return 1;
+    }
     
     int opt = 1;
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    if (setsockopt(ipv6Socket.sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt IPV6_V6ONLY");
+        return 1;
+    }
 
-    struct sockaddr_in6 clientAddr, serverAddr; // ipv6 socket address
-    socklen_t clientAddrLen = sizeof(clientAddr), serverAddrLen = sizeof(serverAddr);
-    setupServerDetails(&serverAddr);
+    // after creating ipv6, ipv4 is getting blocked, because it's address is already in use by ipv6
+    // setsockopt(ipv6Socket.sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    // setsockopt(ipv4Socket.sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    setupServerDetails(&ipv6Socket);
+    setupServerDetails(&ipv4Socket);
 
     
     // binds local name to the socket
-    if (bind(sock, (struct sockaddr*) &serverAddr, serverAddrLen) < 0) {
-        perror("bind");
+    if (bindSocket(&ipv6Socket) < 0 || bindSocket(&ipv4Socket) < 0) {
         return 1;
     }    
 
-    if (listen(sock, MAXUSERS) < 0) {
-        perror("listen");
+    if (listen(ipv6Socket.sock, MAXUSERS) < 0) {
+        perror("listen (IPv6)");
         return 1;
-    } else {
-        while (1) {
-            // accept the user and create a socket for them
-            int clientSocket = accept(sock, (struct sockaddr*) &clientAddr, &clientAddrLen);
-            if (clientSocket < 0) {
-                perror("accept");
-                return 1;
-            }
+    } 
 
-            // after accepting I can get IP/port and info about machine
-            getpeername(clientSocket, (struct sockaddr*) &clientAddr, &clientAddrLen);
-            char ipStr[INET6_ADDRSTRLEN];
-            inet_ntop(AF_INET6, &clientAddr.sin6_addr, ipStr, sizeof(ipStr));
-            printf("IP address: %s\n", ipStr);
-            printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
+    if (listen(ipv4Socket.sock, MAXUSERS) < 0) {
+        perror("listen (IPv4)");
+        return 1;
+    }
 
-            // Establishing concurency
-            pid_t pid = fork();
-            if (pid < 0) {
-                perror("fork");
-                close(clientSocket);
-                return 1;
-            } else if (pid == 0) {
-                close(sock); // close the listening socket in the child
-                handleClient(clientSocket);
-                close(clientSocket);
-                exit(EXIT_SUCCESS);
-            } else {
-                close(clientSocket);
-            }
+    printf("Server running... Waiting for clients.\n");
+
+    // file descriptor for reading.
+    // --- future update add writing ---
+    fd_set readfds; 
+    while (running) {
+        selectSockets(&readfds, &ipv4Socket, &ipv6Socket);
+
+        // monitor both sockets for incoming connections
+        int maxfd, activity;
+        if (ipv6Socket.sock > ipv4Socket.sock) {
+            maxfd = ipv6Socket.sock;
+        } else {
+            maxfd = ipv4Socket.sock;
         }
+
+        // nfds, readfds, writefds, exceptfds, timeout
+        activity = select(maxfd + 1, &readfds, NULL, NULL, NULL); 
+        if (activity < 0) {
+            perror("select");
+            return 1;
+        }
+
+        acceptConnection(&ipv6Socket, &readfds);
+        acceptConnection(&ipv4Socket, &readfds);
     }
 }
