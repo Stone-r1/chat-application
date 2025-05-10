@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -22,13 +23,23 @@ int createSocket() {
 
 void assignConnection(struct sockaddr_in6* addr) {
     memset(addr, 0, sizeof(struct sockaddr_in6));
-    addr -> sin6_family = AF_INET6;
-    addr -> sin6_port = htons(PORT);
-    addr -> sin6_scope_id = if_nametoindex("wlan0");
-    if (inet_pton(AF_INET6, "ipv6", &addr -> sin6_addr) != 1) {
-        perror("inet_pton");
+    
+    struct addrinfo hints, *res;
+    const char* serverIP = "::1";
+    int status;
+    
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((status = getaddrinfo(serverIP, NULL, &hints, &res)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
         exit(EXIT_FAILURE);
     }
+
+    memcpy(addr, res -> ai_addr, sizeof(struct sockaddr_in6));
+    addr -> sin6_port = htons(PORT);
+    freeaddrinfo(res);
 }
 
 void chat(int socket) {
@@ -46,7 +57,7 @@ void chat(int socket) {
         read(socket, buffer, sizeof(buffer));
         printf("From server: %s", buffer);
         
-        char* errorMessage = "exit\n";
+        const char* errorMessage = "exit\n";
         if ((strncmp(buffer, errorMessage, sizeof(errorMessage))) == 0) {
             printf("Client Exit...\n");
             break;
