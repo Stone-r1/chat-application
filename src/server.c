@@ -14,8 +14,6 @@
 #define BUFFERSIZE 1024
 
 /* TODO
- * log client IP/port - I think done but not sure yet
- * normal shut down handling
  * handle partial reads/writes
 */
 
@@ -65,14 +63,28 @@ int bindSocket(SocketWrapper* socketWrapper) {
     return 0;
 }
 
+// handle partial write (ssize_t -> signed size_t)
+ssize_t sendAll(int socket, const char* buffer, size_t length) {
+    size_t totalSent = 0;
+    while (totalSent < length) {
+        ssize_t sent = write(socket, buffer + totalSent, length - totalSent);
+        if (sent <= 0) {
+            return -1; // ERROR or Connection closed.
+        }
+        totalSent += sent;
+    }
+
+    return totalSent;
+}
+
 void handleClient(int clientSocket) {
     char buffer[BUFFERSIZE + 1] = {0};
     int message;
     while ((message = read(clientSocket, buffer, BUFFERSIZE)) > 0) {
         buffer[message] = '\0';
-        printf("Client: %s", buffer);
+        printf("Client: \"%s\"\n", buffer);
         const char* replyText = "Server has received your message\n";
-        write(clientSocket, replyText, strlen(replyText));
+        sendAll(clientSocket, replyText, strlen(replyText));
     }
 }
 
@@ -97,7 +109,7 @@ int acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
         char clientIP[INET6_ADDRSTRLEN];
         inet_ntop(socketWrapper -> family, &clientAddr.sin6_addr, clientIP, sizeof(clientIP));
         // ntohs -> converts the port number from network byte order to host byte order 
-        printf("IP address: %s\n", ipStr);
+        printf("IP address: %s\n", clientIP);
         printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
 
         handleClient(clientSocket);

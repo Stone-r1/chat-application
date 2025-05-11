@@ -50,9 +50,12 @@ void chat(int socket) {
         memset(buffer, 0, sizeof(buffer));
         printf("Enter the message: ");
         n = 0;
-        while ((buffer[n++] == getchar()) != '\n');
+        while ((buffer[n] = getchar()) != '\n' && n < BUFFERSIZE - 1) {
+            n++;
+        }
+        buffer[n] = '\0';
 
-        write(socket, buffer, sizeof(buffer));
+        write(socket, buffer, strlen(buffer));
         bzero(buffer, sizeof(buffer));
         read(socket, buffer, sizeof(buffer));
         printf("From server: %s", buffer);
