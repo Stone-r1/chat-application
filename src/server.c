@@ -95,7 +95,7 @@ void selectSockets(fd_set* readfds, SocketWrapper* ipv4Socket, SocketWrapper* ip
     FD_SET(ipv6Socket -> sock, readfds); // monitor for events
 }
 
-int acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
+int acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds, int* clientSockets, int* clientAmount) {
     struct sockaddr_in6 clientAddr;
     socklen_t clientAddrLen = sizeof(clientAddr);
 
@@ -112,11 +112,25 @@ int acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
         printf("IP address: %s\n", clientIP);
         printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
 
-        handleClient(clientSocket);
-        close(clientSocket);
+        clientSockets[*clientAmount] = clientSocket;
+        (*clientAmount)++;
+
+        printf("New Client Connected!\n");
+        //handleClient(clientSocket);
+        //close(clientSocket);
     }
 
     return 0;
+}
+
+void removeClient(int* clientSockets, int* clientAmount, int clientSocket) {
+    for (int i = 0; i < *clientAmount; i++) {
+        if (clientSockets[i] == clientSocket) {
+            close(clientSocket);
+            clientSockets[i] = clientSockets[--(*clientAmount)];
+            break;
+        }
+    }
 }
 
 int main(int args, char* argv[]) {
@@ -160,9 +174,10 @@ int main(int args, char* argv[]) {
 
     printf("Server running... Waiting for clients.\n");
 
-    // file descriptor for reading.
-    // --- future update add writing ---
-    fd_set readfds; 
+    fd_set readfds;
+    int clientSockets[MAXUSERS + 1];
+    int clientAmount = 0;
+
     while (running) {
         selectSockets(&readfds, &ipv4Socket, &ipv6Socket);
 
@@ -174,6 +189,14 @@ int main(int args, char* argv[]) {
             maxfd = ipv4Socket.sock;
         }
 
+        // updating readfd and determining maximum file descriptor
+        for (int i = 0; i < clientAmount; i++) {
+            FD_SET(clientSockets[i], &readfds);
+            if (clientSockets[i] > maxfd) {
+                maxfd = clientSockets[i];
+            }
+        }
+
         // nfds, readfds, writefds, exceptfds, timeout
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL); 
         if (activity < 0) {
@@ -181,7 +204,14 @@ int main(int args, char* argv[]) {
             return 1;
         }
 
-        acceptConnection(&ipv6Socket, &readfds);
-        acceptConnection(&ipv4Socket, &readfds);
+        acceptConnection(&ipv6Socket, &readfds, clientSockets, &clientAmount);
+        acceptConnection(&ipv4Socket, &readfds, clientSockets, &clientAmount);
+
+        for (int i = 0; i < clientAmount; i++) {
+            if (FD_ISSET(clientSockets[i], &readfds)) {
+                handleClient(clientSockets[i]);
+                removeClient(clientSockets, &clientAmount, clientSockets[i]);
+            }
+        }
     }
 }
