@@ -11,7 +11,7 @@
 #include <pthread.h>
 
 #define MYPORT 7270
-#define MAXUSERS 5
+#define MAXUSERS 20
 #define BUFFERSIZE 1024
 
 volatile sig_atomic_t running = 1;
@@ -25,11 +25,11 @@ typedef struct {
     int sockfd;
 } client_t;
 
-struct SocketWrapper {
+typedef struct {
     int sock;
     struct sockaddr_in6 addr;
     int family;
-};
+} SocketWrapper;
 
 static pthread_mutex_t clientMutex = PTHREAD_MUTEX_INITIALIZER; // unlocked mutex
 static client_t *clientList[MAXUSERS]; // mutex used to ensure that only on thread can modify the array at a time.
@@ -173,8 +173,15 @@ void acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
 int main(int args, char* argv[]) {
     signal(SIGINT, handleShutdown); // signal handler for proper shutdown
    
-    SocketWrapper ipv6Socket = {createSocket(AF_INET6), {}, AF_INET6};
-    SocketWrapper ipv4Socket = {createSocket(AF_INET), {}, AF_INET};
+    SocketWrapper ipv6Socket;
+    memset(&ipv6Socket, 0, sizeof(ipv6Socket.addr));
+    ipv6Socket.sock = createSocket(AF_INET6);
+    ipv6Socket.family = AF_INET6;
+
+    SocketWrapper ipv4Socket;
+    memset(&ipv4Socket, 0, sizeof(ipv4Socket.addr));
+    ipv4Socket.sock = createSocket(AF_INET);
+    ipv4Socket.family = AF_INET;
 
     if (ipv6Socket.sock < 0 || ipv4Socket.sock < 0) {
         return 1;
@@ -250,3 +257,6 @@ int main(int args, char* argv[]) {
     printf("Server Shutdown.\n");
     return 0;
 }
+
+// There are a lot of comments that are completely redundant.
+// They were written in educational purposes (I'm the one who needs them to learn properly :D)
