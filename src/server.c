@@ -94,20 +94,26 @@ int bindSocket(SocketWrapper* socketWrapper) {
 
 // handle partial write (ssize_t -> signed size_t)
 ssize_t sendAll(const char* buffer, size_t length) {
-    size_t totalSent = 0;
     for (int i = 0; i < MAXUSERS; i++) {
-        if (clientList[i] == NULL) continue;
+        if (clientList[i] == NULL) {
+            continue;
+        }
 
         int socket = clientList[i] -> sockfd;
-        while (totalSent < length) {
-            ssize_t sent = write(socket, buffer + totalSent, length - totalSent);
+        size_t bytesLeft = length;
+        const char* bufferPtr = buffer;
+
+        while (bytesLeft > 0) {
+            ssize_t sent = write(socket, bufferPtr, bytesLeft);
             if (sent <= 0) {
-                return -1; // ERROR or Connection closed.
+                perror("write");
+                break; // ERROR or Connection closed.
             }
-            totalSent += sent;
+            bytesLeft -= sent;
+            bufferPtr += sent;
         } 
     } 
-    return totalSent;
+    return (ssize_t)length;
 }
 
 void* handleClient(void* arg) {
@@ -116,11 +122,11 @@ void* handleClient(void* arg) {
     // int clientSocket = *(int*)arg; // casting void* to int* and dereferencing
     // free(arg);
 
-    char buffer[BUFFERSIZE + 1] = {0};
+    char buffer[BUFFERSIZE + 2] = {0};
     int message;
     while ((message = read(clientSocket, buffer, BUFFERSIZE)) > 0) {
         buffer[message] = '\0';
-        printf("Client [%d]: \"%s\"\n",clientSocket, buffer);
+        printf("Client[%d]: %.*s\n", clientSocket, message, buffer);
 
         // change it. support all client sockets.
         
