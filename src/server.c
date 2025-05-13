@@ -119,13 +119,7 @@ ssize_t sendAll(const char* buffer, size_t length) {
     return (ssize_t)length;
 }
 
-int getUsername(int clientSocket, client_t* client) {
-    const char* usernamePrompt = "Enter Your Username.\n";
-    if ((write(clientSocket, usernamePrompt, strlen(usernamePrompt))) <= 0) {
-        perror("write");
-        return 0;
-    }
-    
+int getUsername(int clientSocket, client_t* client) { 
     char username[MAXUSERNAMELEN];
     ssize_t messageLen;
     if ((messageLen = read(clientSocket, username, sizeof(username) - 1)) <= 0) {
@@ -138,6 +132,7 @@ int getUsername(int clientSocket, client_t* client) {
     return 1;
 }
 
+// #IMPORTANT - don't send client's own messages to them.
 void* handleClient(void* arg) {
     client_t* client = (client_t*)arg;
     int clientSocket = client -> sockfd;

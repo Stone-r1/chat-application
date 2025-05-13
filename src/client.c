@@ -61,7 +61,7 @@ void chat(int socket, const char* username) {
         write(socket, tempBuffer, strlen(tempBuffer));
         bzero(finalBuffer, sizeof(finalBuffer));
         read(socket, finalBuffer, sizeof(finalBuffer));
-        printf("From server: %s\n", finalBuffer);
+        printf("From server: %s", finalBuffer);
         
         const char* errorMessage = "exit\n";
         if ((strncmp(tempBuffer, errorMessage, sizeof(errorMessage))) == 0) {
