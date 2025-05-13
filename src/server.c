@@ -13,6 +13,7 @@
 #define MYPORT 7270
 #define MAXUSERS 20
 #define BUFFERSIZE 1024
+#define MAXUSERNAMELEN 65
 
 volatile sig_atomic_t running = 1;
 
@@ -22,6 +23,7 @@ void handleShutdown(int signal) {
 
 // = neccessary tools =
 typedef struct {
+    char username[MAXUSERNAMELEN];  
     int sockfd;
 } client_t;
 
@@ -99,6 +101,7 @@ ssize_t sendAll(const char* buffer, size_t length) {
             continue;
         }
 
+        // each client gets it's own counter of sent bytes.
         int socket = clientList[i] -> sockfd;
         size_t bytesLeft = length;
         const char* bufferPtr = buffer;
@@ -116,17 +119,41 @@ ssize_t sendAll(const char* buffer, size_t length) {
     return (ssize_t)length;
 }
 
+int getUsername(int clientSocket, client_t* client) {
+    const char* usernamePrompt = "Enter Your Username.\n";
+    if ((write(clientSocket, usernamePrompt, strlen(usernamePrompt))) <= 0) {
+        perror("write");
+        return 0;
+    }
+    
+    char username[MAXUSERNAMELEN];
+    ssize_t messageLen;
+    if ((messageLen = read(clientSocket, username, sizeof(username) - 1)) <= 0) {
+        perror("read");
+        return 0;
+    }
+
+    username[messageLen] = '\0';
+    strncpy(client -> username, username, sizeof(client -> username));
+    return 1;
+}
+
 void* handleClient(void* arg) {
     client_t* client = (client_t*)arg;
     int clientSocket = client -> sockfd;
-    // int clientSocket = *(int*)arg; // casting void* to int* and dereferencing
-    // free(arg);
+
+    if (!getUsername(clientSocket, client)) {
+        close(clientSocket);
+        removeClient(clientSocket);
+        printf("Invalid Username");
+        return NULL;
+    }
 
     char buffer[BUFFERSIZE + 2] = {0};
     int message;
     while ((message = read(clientSocket, buffer, BUFFERSIZE)) > 0) {
         buffer[message] = '\0';
-        printf("Client[%d]: %.*s\n", clientSocket, message, buffer);
+        printf("%s: %.*s\n", client -> username, message, buffer);
 
         // change it. support all client sockets.
         

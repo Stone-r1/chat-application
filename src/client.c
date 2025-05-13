@@ -11,6 +11,7 @@
 
 #define PORT 7270
 #define BUFFERSIZE 1024
+#define MAXUSERNAMELEN 65
 
 int createSocket() {
     int sock = socket(AF_INET6, SOCK_STREAM, 0);
@@ -42,26 +43,28 @@ void assignConnection(struct sockaddr_in6* addr) {
     freeaddrinfo(res);
 }
 
-void chat(int socket) {
-    char buffer[BUFFERSIZE + 1] = {0};
+void chat(int socket, const char* username) {
+    // tempBuffer => raw message | finalBuffer => username + message
+    char tempBuffer[BUFFERSIZE + 1] = {0};
+    char finalBuffer[BUFFERSIZE + MAXUSERNAMELEN] = {0};
     int n;
 
     while (1) {
-        memset(buffer, 0, sizeof(buffer));
-        printf("Enter the message: ");
+        memset(tempBuffer, 0, sizeof(tempBuffer));
+        printf("%s: ", username); // show username locally
         n = 0;
-        while ((buffer[n] = getchar()) != '\n' && n < BUFFERSIZE - 1) {
+        while ((tempBuffer[n] = getchar()) != '\n' && n < BUFFERSIZE - 1) {
             n++;
         }
-        buffer[n] = '\0';
+        tempBuffer[n] = '\0';
 
-        write(socket, buffer, strlen(buffer));
-        bzero(buffer, sizeof(buffer));
-        read(socket, buffer, sizeof(buffer));
-        printf("From server: %s", buffer);
+        write(socket, tempBuffer, strlen(tempBuffer));
+        bzero(finalBuffer, sizeof(finalBuffer));
+        read(socket, finalBuffer, sizeof(finalBuffer));
+        printf("From server: %s\n", finalBuffer);
         
         const char* errorMessage = "exit\n";
-        if ((strncmp(buffer, errorMessage, sizeof(errorMessage))) == 0) {
+        if ((strncmp(tempBuffer, errorMessage, sizeof(errorMessage))) == 0) {
             printf("Client Exit...\n");
             break;
         }
@@ -83,6 +86,12 @@ int main(int args, char* argv[]) {
         printf("Connection established\n");
     }
 
-    chat(sock);
+    char username[MAXUSERNAMELEN];
+    printf("Enter your username: ");
+    fgets(username, sizeof(username), stdin);
+    username[strcspn(username, "\n")] = '\0'; // find first of
+    write(sock, username, strlen(username)); // send username outright
+
+    chat(sock, username);
     close(sock);
 }
