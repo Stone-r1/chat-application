@@ -93,16 +93,20 @@ int bindSocket(SocketWrapper* socketWrapper) {
 }
 
 // handle partial write (ssize_t -> signed size_t)
-ssize_t sendAll(int socket, const char* buffer, size_t length) {
+ssize_t sendAll(const char* buffer, size_t length) {
     size_t totalSent = 0;
-    while (totalSent < length) {
-        ssize_t sent = write(socket, buffer + totalSent, length - totalSent);
-        if (sent <= 0) {
-            return -1; // ERROR or Connection closed.
-        }
-        totalSent += sent;
-    }
+    for (int i = 0; i < MAXUSERS; i++) {
+        if (clientList[i] == NULL) continue;
 
+        int socket = clientList[i] -> sockfd;
+        while (totalSent < length) {
+            ssize_t sent = write(socket, buffer + totalSent, length - totalSent);
+            if (sent <= 0) {
+                return -1; // ERROR or Connection closed.
+            }
+            totalSent += sent;
+        } 
+    } 
     return totalSent;
 }
 
@@ -117,8 +121,12 @@ void* handleClient(void* arg) {
     while ((message = read(clientSocket, buffer, BUFFERSIZE)) > 0) {
         buffer[message] = '\0';
         printf("Client [%d]: \"%s\"\n",clientSocket, buffer);
-        const char* replyText = "Server has received your message\n";
-        sendAll(clientSocket, replyText, strlen(replyText));
+
+        // change it. support all client sockets.
+        
+        buffer[message] = '\n';
+        buffer[message + 1] = '\0';
+        sendAll(buffer, message + 1);
     }
 
     // cleanup
