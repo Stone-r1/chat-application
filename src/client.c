@@ -54,7 +54,6 @@ void chat(int socket, const char* username) {
     fds[0].events = POLLIN;
     fds[1].fd = socket; // server messages
     fds[1].events = POLLIN;
-    // fds[0].revents => what events actually occured
 
     while (1) {
         if ((poll(fds, 2, -1)) < 0) {

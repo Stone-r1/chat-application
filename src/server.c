@@ -95,9 +95,9 @@ int bindSocket(SocketWrapper* socketWrapper) {
 }
 
 // handle partial write (ssize_t -> signed size_t)
-ssize_t sendAll(const char* buffer, size_t length) {
+ssize_t sendAll(const char* buffer, size_t length, const char* username) {
     for (int i = 0; i < MAXUSERS; i++) {
-        if (clientList[i] == NULL) {
+        if (clientList[i] == NULL || clientList[i] -> username == username) {
             continue;
         }
 
@@ -154,7 +154,7 @@ void* handleClient(void* arg) {
         
         buffer[message] = '\n';
         buffer[message + 1] = '\0';
-        sendAll(buffer, message + 1);
+        sendAll(buffer, message + 1, client -> username);
     }
 
     // cleanup
