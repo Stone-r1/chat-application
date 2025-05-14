@@ -142,7 +142,12 @@ int getUsername(int clientSocket, client_t* client) {
     return 1;
 }
 
-void disconnectClient(int clientSocket) {
+void disconnectClient(int clientSocket, const char* username) { 
+    char message[BUFFERSIZE];
+    snprintf(message, sizeof(message), "Client %s has disconnected.\n", username);
+    printf("Client: %s has disconnected.\n", username); // to display on server
+    sendAll(message, strlen(message), username);
+
     close(clientSocket);
     removeClient(clientSocket);
 }
@@ -154,7 +159,7 @@ void* handleClient(void* arg) {
     if (!getUsername(clientSocket, client)) {
         const char* invalidUsername = "Invalid Username.\n";
         write(clientSocket, invalidUsername, strlen(invalidUsername));
-        disconnectClient(clientSocket);
+        disconnectClient(clientSocket, client -> username);
         return NULL;
     }
 
@@ -174,8 +179,7 @@ void* handleClient(void* arg) {
     }
 
     // cleanup
-    disconnectClient(clientSocket);
-    printf("Client[%d] disconnected.\n", clientSocket);
+    disconnectClient(clientSocket, client -> username);
     return NULL;
 }
 

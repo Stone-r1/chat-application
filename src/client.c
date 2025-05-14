@@ -72,6 +72,20 @@ void assignConnection(struct sockaddr_in6* addr) {
     freeaddrinfo(res);
 }
 
+int exitCommand(const char* buffer) {
+    if (strncmp(buffer, "/exit", 5) == 0) {
+        const char* exitMessage = "Client Exit...\n";
+        write(STDOUT_FILENO, exitMessage, strlen(exitMessage));
+        return 1;
+    }
+    return 0;
+}
+
+// implement later
+int privateMessageCommand() {
+    return 0;
+}
+
 void chat(int socket, const char* username) {
     enableRawMode();
 
@@ -103,17 +117,17 @@ void chat(int socket, const char* username) {
             }
 
             // enter
-            if (c == '\r' || c == '\n') {
+            if (c == '\r' || c == '\n') { 
+                write(STDOUT_FILENO, "\r\n", 2); // output newline
+                 
+                // === CHAT FUNCTIONS ===
+                if (exitCommand(buffer)) {
+                    break;
+                }
+                // ======================
+
                 if (bufferLen > 0) {
                     write(socket, buffer, bufferLen);
-                }
-                write(STDOUT_FILENO, "\r\n", 2); // output newline
-                
-                // if /exit was typed close
-                if (strncmp(buffer, "/exit", 5) == 0) {
-                    const char* exitMessage = "Client Exit...\n";
-                    write(STDOUT_FILENO, exitMessage, strlen(exitMessage));
-                    break;
                 }
 
                 bufferLen = 0;
