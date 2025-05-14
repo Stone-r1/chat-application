@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <net/if.h>
+#include <poll.h>
 
 #define PORT 7270
 #define BUFFERSIZE 1024
@@ -47,26 +48,49 @@ void chat(int socket, const char* username) {
     // tempBuffer => raw message | finalBuffer => username + message
     char tempBuffer[BUFFERSIZE + 1] = {0};
     char finalBuffer[BUFFERSIZE + MAXUSERNAMELEN] = {0};
-    int n;
+    
+    struct pollfd fds[2];
+    fds[0].fd = 0; // user typing
+    fds[0].events = POLLIN;
+    fds[1].fd = socket; // server messages
+    fds[1].events = POLLIN;
+    // fds[0].revents => what events actually occured
 
     while (1) {
-        memset(tempBuffer, 0, sizeof(tempBuffer));
-        printf("%s: ", username); // show username locally
-        n = 0;
-        while ((tempBuffer[n] = getchar()) != '\n' && n < BUFFERSIZE - 1) {
-            n++;
-        }
-        tempBuffer[n] = '\0';
+        if ((poll(fds, 2, -1)) < 0) {
+            perror("poll");
+            break; 
+        }        
 
-        write(socket, tempBuffer, strlen(tempBuffer));
-        bzero(finalBuffer, sizeof(finalBuffer));
-        read(socket, finalBuffer, sizeof(finalBuffer));
-        printf("From server: %s", finalBuffer);
-        
-        const char* errorMessage = "exit\n";
-        if ((strncmp(tempBuffer, errorMessage, sizeof(errorMessage))) == 0) {
-            printf("Client Exit...\n");
-            break;
+        // input from user
+        if (fds[0].revents & POLLIN) {
+            memset(tempBuffer, 0, sizeof(tempBuffer));
+            
+            if (fgets(tempBuffer, BUFFERSIZE, stdin) == NULL) {
+                break;
+            }
+
+            tempBuffer[strcspn(tempBuffer, "\n")] = '\0';
+
+            if (write(socket, tempBuffer, strlen(tempBuffer)) <= 0) {
+                perror("write");
+                break;
+            }
+
+            if (strncmp(tempBuffer, "exit", 4) == 0) {
+                printf("Client Exit...\n");
+                break;
+            }
+        }
+
+        // output from server
+        if (fds[1].revents & POLLIN) {
+            memset(finalBuffer, 0, sizeof(finalBuffer));
+            if (read(socket, finalBuffer, sizeof(finalBuffer) - 1) <= 0) {
+                perror("read");
+                break;
+            }
+            printf("From server: %s", finalBuffer);
         }
     }
 }
