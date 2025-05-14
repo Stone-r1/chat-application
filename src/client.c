@@ -108,6 +108,14 @@ void chat(int socket, const char* username) {
                     write(socket, buffer, bufferLen);
                 }
                 write(STDOUT_FILENO, "\r\n", 2); // output newline
+                
+                // if /exit was typed close
+                if (strncmp(buffer, "/exit", 5) == 0) {
+                    const char* exitMessage = "Client Exit...\n";
+                    write(STDOUT_FILENO, exitMessage, strlen(exitMessage));
+                    break;
+                }
+
                 bufferLen = 0;
                 memset(buffer, 0, sizeof(buffer));
                 write(STDOUT_FILENO, prompt, strlen(prompt));
