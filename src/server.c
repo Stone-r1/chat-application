@@ -97,7 +97,7 @@ int bindSocket(SocketWrapper* socketWrapper) {
 // handle partial write (ssize_t -> signed size_t)
 ssize_t sendAll(const char* buffer, size_t length, const char* username) {
     for (int i = 0; i < MAXUSERS; i++) {
-        if (clientList[i] == NULL || clientList[i] -> username == username) {
+        if (clientList[i] == NULL || (strcmp(clientList[i] -> username, username)) == 0) {
             continue;
         }
 
@@ -128,19 +128,33 @@ int getUsername(int clientSocket, client_t* client) {
     }
 
     username[messageLen] = '\0';
+    // check if username already exists.
+    for (int i = 0; i < MAXUSERS; i++) {
+        if (clientList[i] == NULL) {
+            continue;
+        }
+
+        if ((strcmp(clientList[i] -> username, username)) == 0) {
+            return 0;
+        }
+    }
     strncpy(client -> username, username, sizeof(client -> username));
     return 1;
 }
 
-// #IMPORTANT - don't send client's own messages to them.
+void disconnectClient(int clientSocket) {
+    close(clientSocket);
+    removeClient(clientSocket);
+}
+
 void* handleClient(void* arg) {
     client_t* client = (client_t*)arg;
     int clientSocket = client -> sockfd;
 
     if (!getUsername(clientSocket, client)) {
-        close(clientSocket);
-        removeClient(clientSocket);
-        printf("Invalid Username");
+        const char* invalidUsername = "Invalid Username.\n";
+        write(clientSocket, invalidUsername, strlen(invalidUsername));
+        disconnectClient(clientSocket);
         return NULL;
     }
 
@@ -150,16 +164,17 @@ void* handleClient(void* arg) {
         buffer[message] = '\0';
         printf("%s: %.*s\n", client -> username, message, buffer);
 
-        // change it. support all client sockets.
-        
         buffer[message] = '\n';
         buffer[message + 1] = '\0';
-        sendAll(buffer, message + 1, client -> username);
+
+        // message including nickname
+        char fullMessage[MAXUSERNAMELEN + MAXUSERNAMELEN + 4];
+        int len = snprintf(fullMessage, sizeof(fullMessage), "[%s]: %s", client -> username, buffer); 
+        sendAll(fullMessage, len, client -> username);
     }
 
     // cleanup
-    close(clientSocket);
-    removeClient(clientSocket);
+    disconnectClient(clientSocket);
     printf("Client[%d] disconnected.\n", clientSocket);
     return NULL;
 }

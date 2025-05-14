@@ -46,7 +46,7 @@ void assignConnection(struct sockaddr_in6* addr) {
 
 void chat(int socket, const char* username) {
     // tempBuffer => raw message | finalBuffer => username + message
-    char tempBuffer[BUFFERSIZE + 1] = {0};
+    char tempBuffer[BUFFERSIZE] = {0};
     char finalBuffer[BUFFERSIZE + MAXUSERNAMELEN] = {0};
     
     struct pollfd fds[2];
@@ -64,7 +64,7 @@ void chat(int socket, const char* username) {
         // input from user
         if (fds[0].revents & POLLIN) {
             memset(tempBuffer, 0, sizeof(tempBuffer));
-            
+
             if (fgets(tempBuffer, BUFFERSIZE, stdin) == NULL) {
                 break;
             }
@@ -89,7 +89,7 @@ void chat(int socket, const char* username) {
                 perror("read");
                 break;
             }
-            printf("From server: %s", finalBuffer);
+            printf(finalBuffer);
         }
     }
 }

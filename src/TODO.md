@@ -4,7 +4,7 @@
 
 ## Broadcasting messages to all clients.
 As for now only the server replies. I can add a function to broadcast messages from one client to all others.
-- Not Done Yet.
+- Done.
 
 ---
 
