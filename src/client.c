@@ -9,10 +9,38 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <poll.h>
+#include <termios.h>
 
 #define PORT 7270
 #define BUFFERSIZE 1024
 #define MAXUSERNAMELEN 65
+
+
+static struct termios originalTerminal;
+
+// restores the cannonical mode
+void disableRawMode() {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &originalTerminal);
+}
+
+// sets to non-cannonical mode
+void enableRawMode() {
+    tcgetattr(STDIN_FILENO, &originalTerminal);
+    atexit(disableRawMode);
+
+    struct termios rawTerminal = originalTerminal;
+    rawTerminal.c_lflag &= ~(ECHO | ICANON); // disable echo and canonical mode
+    // waits up to VTIME, returns as soon as data is available or timeout
+    rawTerminal.c_cc[VMIN] = 0;
+    rawTerminal.c_cc[VTIME] = 1;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &rawTerminal); //apply
+}
+
+void redrawPrompt(const char* prompt, char* buffer, size_t len) {
+    write(STDOUT_FILENO, "\r\033[K", 4); // clear the current line
+    write(STDOUT_FILENO, prompt, strlen(prompt));
+    write(STDOUT_FILENO, buffer, len);
+}
 
 int createSocket() {
     int sock = socket(AF_INET6, SOCK_STREAM, 0);
@@ -45,12 +73,17 @@ void assignConnection(struct sockaddr_in6* addr) {
 }
 
 void chat(int socket, const char* username) {
-    // tempBuffer => raw message | finalBuffer => username + message
-    char tempBuffer[BUFFERSIZE] = {0};
-    char finalBuffer[BUFFERSIZE + MAXUSERNAMELEN] = {0};
+    enableRawMode();
+
+    char prompt[MAXUSERNAMELEN + 4];
+    snprintf(prompt, sizeof(prompt), "[%s]: ", username);
+    char buffer[BUFFERSIZE] = {0};
+    size_t bufferLen = 0;
     
+    write(STDOUT_FILENO, prompt, strlen(prompt));
+
     struct pollfd fds[2];
-    fds[0].fd = 0; // user typing
+    fds[0].fd = STDIN_FILENO; // user typing
     fds[0].events = POLLIN;
     fds[1].fd = socket; // server messages
     fds[1].events = POLLIN;
@@ -63,33 +96,43 @@ void chat(int socket, const char* username) {
 
         // input from user
         if (fds[0].revents & POLLIN) {
-            memset(tempBuffer, 0, sizeof(tempBuffer));
-
-            if (fgets(tempBuffer, BUFFERSIZE, stdin) == NULL) {
-                break;
+            char c;
+            ssize_t n = read(STDIN_FILENO, &c, 1); // read one character
+            if (n <= 0) {
+                continue;
             }
 
-            tempBuffer[strcspn(tempBuffer, "\n")] = '\0';
-
-            if (write(socket, tempBuffer, strlen(tempBuffer)) <= 0) {
-                perror("write");
-                break;
-            }
-
-            if (strncmp(tempBuffer, "exit", 4) == 0) {
-                printf("Client Exit...\n");
-                break;
+            // enter
+            if (c == '\r' || c == '\n') {
+                if (bufferLen > 0) {
+                    write(socket, buffer, bufferLen);
+                }
+                write(STDOUT_FILENO, "\r\n", 2); // output newline
+                bufferLen = 0;
+                memset(buffer, 0, sizeof(buffer));
+                write(STDOUT_FILENO, prompt, strlen(prompt));
+            } else if (c == 127 || c == '\b') { // backspace
+                if (bufferLen) {
+                    bufferLen--;
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+            } else if (bufferLen < sizeof(buffer) - 1) { // add character to input
+                buffer[bufferLen++] = c;
+                write(STDOUT_FILENO, &c, 1);
             }
         }
 
-        // output from server
         if (fds[1].revents & POLLIN) {
-            memset(finalBuffer, 0, sizeof(finalBuffer));
-            if (read(socket, finalBuffer, sizeof(finalBuffer) - 1) <= 0) {
-                perror("read");
+            char message[BUFFERSIZE + 1];
+            ssize_t n = read(socket, message, BUFFERSIZE);
+            if (n <= 0) {
                 break;
             }
-            printf(finalBuffer);
+
+            message[n] = '\0';
+            write(STDOUT_FILENO, "\r\033[K", 4);
+            write(STDOUT_FILENO, message, n);
+            redrawPrompt(prompt, buffer, bufferLen);
         }
     }
 }
