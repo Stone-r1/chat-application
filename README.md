@@ -1,12 +1,15 @@
-# Multi-Client TCP Chat Server that supports both IPv4 and IPv6.
-This is a multithreaded TCP chat server implemented in C that accepts simultaneous client connections both over IPv4 and IPv6. The server receives messages from the clients, and the server responds with an acknowledgment for each message received.
+# Multi-Client TCP Chat Server With IPv4 and IPv6 Support.
+It's a multithreaded TCP chat server written in C that supports concurrent connections from several clients on both IPv4 and IPv6. Client can connect, register with a unique username, and broadcast messages to all other clients. The server broadcasts messages with usernames prepended to offer a basic group chat functionality.
 
-## Key Features
-- Handles up to 20 concurrent client connections. (`MAXUSERS` can be modified manually.)
-- Dual-stack support: Accepts not just IPv4 but IPv6 connections.
-- Threaded client handling via `pthread`.
-- Thread-safe client management via `pthread_mutex_t`.
-- Eloquent separation of server and client responsibilities.
+## Essential Elements
+- Manages up to 20 client connections at once. (You can manually change `MAXUSERS`).
+- Dual-stack compatibility: Supports both IPv4 and IPv6 connections.
+- Broadcasting of messages: All clients can see messages sent by one client.
+- Username system: client must provide a unique username upon connection.
+- Preservation of Input During Incoming Messages: Clients are able to type uninterrupted. Other users' messages are displayed without interfering with or replacing the active input line. (done via `<termios.h>`).
+- Using `pthread` to handle threaded clients.
+- The use of `pthread_mutex_t` allows for thread-safe client handling.
+- The server and client duties are eloquently separated.
 
 ## Compliation
 
@@ -29,11 +32,26 @@ Then start a client in a separate terminal.
 ---
 
 ## Example
-Client Terminal:
+Client-1 Terminal:
 ```bash
 Connection established
-Enter the message: Hello there
-From server: Server has received your message
+Enter your username: stoney
+[stoney]: hello everyone
+[dark]: haiii
+[dark]: clients are not interrupting each other.
+[stoney]: heh :D
+Client dark has disconnected.
+```
+
+Client-2 Terminal:
+```bash
+Connection established
+Enter your username: dark
+[dark]: haiii
+[dark]: clients are not interrupting each other.  
+[stoney]: heh :D
+[dark]: /exit
+Client Exit...
 ```
 
 Server Terminal:
@@ -41,9 +59,18 @@ Server Terminal:
 Server running... Waiting for clients.
 New client: 5
 IP address: ::1
-Port      : 37136
-Client [5]: "Hello there"
-Client[5] disconnected.
+Port      : 42292
+stoney: hello everyone
+New client: 6
+IP address: ::1
+Port      : 60660
+dark: haiii
+dark: clients are not interrupting each other.
+stoney: heh :D
+Client: dark has disconnected.
 ```
 
 ---
+
+## NOTE
+- Due to lingering socket bindings, the server may become temporarily unavailable for restart if it is shut down while clients are still connected. Make sure every client disconnects before shutting down the server to prevent this.
