@@ -33,8 +33,8 @@ typedef struct {
     int family;
 } SocketWrapper;
 
-static pthread_mutex_t clientMutex = PTHREAD_MUTEX_INITIALIZER; // unlocked mutex
-static client_t *clientList[MAXUSERS]; // mutex used to ensure that only on thread can modify the array at a time.
+static pthread_mutex_t clientMutex = PTHREAD_MUTEX_INITIALIZER;
+static client_t *clientList[MAXUSERS];
 // ====================
 
 void addClient(client_t* client) {
@@ -72,16 +72,13 @@ int createSocket(int family) {
 void setupServerDetails(SocketWrapper* socketWrapper) {
 
     memset(&socketWrapper -> addr, 0, sizeof(socketWrapper -> addr));
-    socketWrapper -> addr.sin6_family = socketWrapper -> family; // specifies family
+    socketWrapper -> addr.sin6_family = socketWrapper -> family;
 
-    // bind to any local address
     if (socketWrapper -> family == AF_INET6) {
-        socketWrapper -> addr.sin6_addr = in6addr_any; // IPv6 case
+        socketWrapper -> addr.sin6_addr = in6addr_any;
     } else {
-        // IMPORTANT: in6addr_any is for IPv6, cannot cast directly to IPv4
         struct in_addr ipv4_any = {INADDR_ANY};
         memcpy(&socketWrapper -> addr.sin6_addr, &ipv4_any, sizeof(ipv4_any));
-        // socketWrapper -> addr.sin6_addr = *((struct in_addr*) &in6addr_any); // IPv4 case
     }
     socketWrapper -> addr.sin6_port = htons(MYPORT);
 }
@@ -94,8 +91,7 @@ int bindSocket(SocketWrapper* socketWrapper) {
     return 0;
 }
 
-// handle partial write (ssize_t -> signed size_t)
-ssize_t sendAll(const char* buffer, size_t length, const char* username) {
+ssize_t sendToAllClients(const char* buffer, size_t length, const char* username) {
     for (int i = 0; i < MAXUSERS; i++) {
         if (clientList[i] == NULL || (strcmp(clientList[i] -> username, username)) == 0) {
             continue;
@@ -128,7 +124,6 @@ int getUsername(int clientSocket, client_t* client) {
     }
 
     username[messageLen] = '\0';
-    // check if username already exists.
     for (int i = 0; i < MAXUSERS; i++) {
         if (clientList[i] == NULL) {
             continue;
@@ -145,8 +140,8 @@ int getUsername(int clientSocket, client_t* client) {
 void disconnectClient(int clientSocket, const char* username) { 
     char message[BUFFERSIZE];
     snprintf(message, sizeof(message), "Client %s has disconnected.\n", username);
-    printf("Client: %s has disconnected.\n", username); // to display on server
-    sendAll(message, strlen(message), username);
+    printf("Client: %s has disconnected.\n", username);
+    sendToAllClients(message, strlen(message), username);
 
     close(clientSocket);
     removeClient(clientSocket);
@@ -172,22 +167,20 @@ void* handleClient(void* arg) {
         buffer[message] = '\n';
         buffer[message + 1] = '\0';
 
-        // message including nickname
         char fullMessage[MAXUSERNAMELEN + MAXUSERNAMELEN + 4];
-        int len = snprintf(fullMessage, sizeof(fullMessage), "[%s]: %s", client -> username, buffer); 
-        sendAll(fullMessage, len, client -> username);
+        int len = snprintf(fullMessage, sizeof(fullMessage), "[%s]: %s", client -> username, buffer);
+
+        sendToAllClients(fullMessage, len, client -> username);
     }
 
-    // cleanup
     disconnectClient(clientSocket, client -> username);
     return NULL;
 }
 
-// Prepares the set of sockets to be monitored
-void selectSockets(fd_set* readfds, SocketWrapper* ipv4Socket, SocketWrapper* ipv6Socket) {
-    FD_ZERO(readfds); // clean
-    FD_SET(ipv4Socket -> sock, readfds); // monitor for events
-    FD_SET(ipv6Socket -> sock, readfds); // monitor for events
+void prepareSocketsForMonitoring(fd_set* readfds, SocketWrapper* ipv4Socket, SocketWrapper* ipv6Socket) {
+    FD_ZERO(readfds);
+    FD_SET(ipv4Socket -> sock, readfds); 
+    FD_SET(ipv6Socket -> sock, readfds); 
 }
 
 void acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
@@ -203,7 +196,7 @@ void acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
 
         char clientIP[INET6_ADDRSTRLEN];
         inet_ntop(socketWrapper -> family, &clientAddr.sin6_addr, clientIP, sizeof(clientIP));
-        // ntohs -> converts the port number from network byte order to host byte order
+        
         printf("New client: %d\n", clientSocket);
         printf("IP address: %s\n", clientIP);
         printf("Port      : %d\n", ntohs(clientAddr.sin6_port));
@@ -226,7 +219,7 @@ void acceptConnection(SocketWrapper* socketWrapper, fd_set* readfds) {
 }
 
 int main(int args, char* argv[]) {
-    signal(SIGINT, handleShutdown); // signal handler for proper shutdown
+    signal(SIGINT, handleShutdown);
    
     SocketWrapper ipv6Socket;
     memset(&ipv6Socket, 0, sizeof(ipv6Socket.addr));
@@ -248,15 +241,9 @@ int main(int args, char* argv[]) {
         return 1;
     }
 
-    // after creating ipv6, ipv4 is getting blocked, because it's address is already in use by ipv6
-    // setsockopt(ipv6Socket.sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    // setsockopt(ipv4Socket.sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
     setupServerDetails(&ipv6Socket);
     setupServerDetails(&ipv4Socket);
-
-    
-    // binds local name to the socket
+ 
     if (bindSocket(&ipv6Socket) < 0 || bindSocket(&ipv4Socket) < 0) {
         return 1;
     }    
@@ -278,9 +265,8 @@ int main(int args, char* argv[]) {
     int clientAmount = 0;
 
     while (running) {
-        selectSockets(&readfds, &ipv4Socket, &ipv6Socket);
+        prepareSocketsForMonitoring(&readfds, &ipv4Socket, &ipv6Socket);
 
-        // monitor both sockets for incoming connections
         int maxfd, activity;
         if (ipv6Socket.sock > ipv4Socket.sock) {
             maxfd = ipv6Socket.sock;
@@ -296,7 +282,6 @@ int main(int args, char* argv[]) {
             }
         }
 
-        // nfds, readfds, writefds, exceptfds, timeout
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL); 
         if (activity < 0) {
             perror("select");
@@ -312,6 +297,3 @@ int main(int args, char* argv[]) {
     printf("Server Shutdown.\n");
     return 0;
 }
-
-// There are a lot of comments that are completely redundant.
-// They were written in educational purposes (I'm the one who needs them to learn properly :D)

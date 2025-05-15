@@ -18,22 +18,20 @@
 
 static struct termios originalTerminal;
 
-// restores the cannonical mode
 void disableRawMode() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &originalTerminal);
 }
 
-// sets to non-cannonical mode
 void enableRawMode() {
     tcgetattr(STDIN_FILENO, &originalTerminal);
     atexit(disableRawMode);
 
     struct termios rawTerminal = originalTerminal;
-    rawTerminal.c_lflag &= ~(ECHO | ICANON); // disable echo and canonical mode
+    rawTerminal.c_lflag &= ~(ECHO | ICANON); 
     // waits up to VTIME, returns as soon as data is available or timeout
     rawTerminal.c_cc[VMIN] = 0;
     rawTerminal.c_cc[VTIME] = 1;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &rawTerminal); //apply
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &rawTerminal);
 }
 
 void redrawPrompt(const char* prompt, char* buffer, size_t len) {
@@ -81,8 +79,53 @@ int exitCommand(const char* buffer) {
     return 0;
 }
 
-// implement later
-int privateMessageCommand() {
+int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
+    char c;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n <= 0) {
+        return 0;
+    }
+
+    if (c == '\r' || c == '\n') { 
+        write(STDOUT_FILENO, "\r\n", 2);
+         
+        // === CHAT FUNCTIONS ===
+        if (exitCommand(buffer)) {
+            return 1;
+        }
+        // ======================
+
+        if (*bufferLen > 0) {
+            write(socket, buffer, *bufferLen);
+        }
+
+        *bufferLen = 0;
+        memset(buffer, 0, BUFFERSIZE);
+        write(STDOUT_FILENO, prompt, strlen(prompt));
+    } else if (c == 127 || c == '\b') {
+        if (*bufferLen) {
+            (*bufferLen)--;
+            write(STDOUT_FILENO, "\b \b", 3);
+        }
+    } else if (*bufferLen < sizeof(buffer) - 1) {
+        buffer[(*bufferLen)++] = c;
+        write(STDOUT_FILENO, &c, 1);
+    }
+
+    return 0;
+}
+
+int handleBroadcasting(int socket, char* buffer, size_t bufferLen, const char* prompt) {
+    char message[BUFFERSIZE + 1];
+    ssize_t n = read(socket, message, BUFFERSIZE);
+    if (n <= 0) {
+        return 1;
+    }
+
+    message[n] = '\0';
+    write(STDOUT_FILENO, "\r\033[K", 4);
+    write(STDOUT_FILENO, message, n);
+    redrawPrompt(prompt, buffer, bufferLen);
     return 0;
 }
 
@@ -108,53 +151,15 @@ void chat(int socket, const char* username) {
             break; 
         }        
 
-        // input from user
         if (fds[0].revents & POLLIN) {
-            char c;
-            ssize_t n = read(STDIN_FILENO, &c, 1); // read one character
-            if (n <= 0) {
-                continue;
-            }
-
-            // enter
-            if (c == '\r' || c == '\n') { 
-                write(STDOUT_FILENO, "\r\n", 2); // output newline
-                 
-                // === CHAT FUNCTIONS ===
-                if (exitCommand(buffer)) {
-                    break;
-                }
-                // ======================
-
-                if (bufferLen > 0) {
-                    write(socket, buffer, bufferLen);
-                }
-
-                bufferLen = 0;
-                memset(buffer, 0, sizeof(buffer));
-                write(STDOUT_FILENO, prompt, strlen(prompt));
-            } else if (c == 127 || c == '\b') { // backspace
-                if (bufferLen) {
-                    bufferLen--;
-                    write(STDOUT_FILENO, "\b \b", 3);
-                }
-            } else if (bufferLen < sizeof(buffer) - 1) { // add character to input
-                buffer[bufferLen++] = c;
-                write(STDOUT_FILENO, &c, 1);
-            }
-        }
-
-        if (fds[1].revents & POLLIN) {
-            char message[BUFFERSIZE + 1];
-            ssize_t n = read(socket, message, BUFFERSIZE);
-            if (n <= 0) {
+            if(handleInput(socket, buffer, &bufferLen, prompt)) {
                 break;
             }
-
-            message[n] = '\0';
-            write(STDOUT_FILENO, "\r\033[K", 4);
-            write(STDOUT_FILENO, message, n);
-            redrawPrompt(prompt, buffer, bufferLen);
+        }
+        if (fds[1].revents & POLLIN) {
+            if (handleBroadcasting(socket, buffer, bufferLen, prompt)) {
+                break;
+            }
         }
     }
 }
@@ -164,8 +169,8 @@ int main(int args, char* argv[]) {
     struct sockaddr_in6 serverAddr;
     
     sock = createSocket();
-    // assign IP/Port
     assignConnection(&serverAddr);
+
     if (connect(sock, (struct sockaddr*) &serverAddr, sizeof(serverAddr)) != 0) {
         printf("Connection failed...\n");
         perror("connect");
@@ -177,8 +182,8 @@ int main(int args, char* argv[]) {
     char username[MAXUSERNAMELEN];
     printf("Enter your username: ");
     fgets(username, sizeof(username), stdin);
-    username[strcspn(username, "\n")] = '\0'; // find first of
-    write(sock, username, strlen(username)); // send username outright
+    username[strcspn(username, "\n")] = '\0'; 
+    write(sock, username, strlen(username));
 
     chat(sock, username);
     close(sock);
