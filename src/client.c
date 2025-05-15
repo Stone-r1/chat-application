@@ -107,7 +107,7 @@ int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt)
             (*bufferLen)--;
             write(STDOUT_FILENO, "\b \b", 3);
         }
-    } else if (*bufferLen < sizeof(buffer) - 1) {
+    } else if (*bufferLen < BUFFERSIZE - 1) {
         buffer[(*bufferLen)++] = c;
         write(STDOUT_FILENO, &c, 1);
     }
