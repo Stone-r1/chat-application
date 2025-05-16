@@ -170,6 +170,61 @@ int listCommand(int socket, const char* buffer, int message) {
     return 0;
 }
 
+void findTargetClient(client_t* client, const char* targetUser, const char* targetMessage) {
+    pthread_mutex_lock(&clientMutex);
+    int found = 0;
+    for (int i = 0; i < MAXUSERS; i++) {
+        if (clientList[i] -> username == NULL || strcmp(clientList[i] -> username, targetUser) != 0) {
+            continue;
+        } 
+        char output[BUFFERSIZE];
+        int n = snprintf(output, BUFFERSIZE, "[PM from %s]: %s\n", client -> username, targetMessage);
+        write(clientList[i] -> sockfd, output, n);
+        found = 1;
+        break;
+    }
+    pthread_mutex_unlock(&clientMutex);
+
+    if (!found) {
+        char notOnlineReply[BUFFERSIZE];
+        int n = snprintf(notOnlineReply, BUFFERSIZE, "User [%s] not online.\n", targetUser);
+        write(client -> sockfd, notOnlineReply, n);
+    }
+}
+
+int privateCommand(client_t* client, char* buffer, int message) {
+    if (strncmp(buffer, "/private ", 9) != 0) {
+        return 0;
+    }
+
+    char* savePtr;
+    char* token = strtok_r(buffer, " ", &savePtr);
+    char* targetUser = NULL;
+    char* targetMessage = NULL;
+
+    while (token) {
+        if (strcmp(token, "-u") == 0) {
+            if ((token = strtok_r(NULL, " ", &savePtr)) == 0) {
+                break;
+            }
+            targetUser = token;
+        } else if (strcmp(token, "-m") == 0) {
+            targetMessage = savePtr;
+            break;
+        }
+        token = strtok_r(NULL, " ", &savePtr);
+    }
+
+    if (!targetMessage || !targetUser) {
+        const char* usageExample = "Usage: /private -u <username> -m <message>\n";
+        write(client -> sockfd, usageExample, strlen(usageExample)); 
+        return 1;
+    }
+
+    findTargetClient(client, targetUser, targetMessage);
+    return 1;
+}
+
 void defaultBroadcast(client_t* client, char* buffer, int message) {
     buffer[message] = '\n';
     buffer[message + 1] = '\0';
@@ -200,7 +255,11 @@ void* handleClient(void* arg) {
         // == User Commands ==
         if (listCommand(clientSocket, buffer, message)) {
             continue;
-        } 
+        }
+
+        if (privateCommand(client, buffer, message)) {
+            continue;
+        }
         // ===================
         defaultBroadcast(client, buffer, message);
     }

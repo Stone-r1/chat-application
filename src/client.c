@@ -118,14 +118,12 @@ int privateCommand(int socket, char* buffer, size_t* bufferLen, const char* prom
     char* message = NULL;
 
     while (token) {
-        if (strcmp(token, "-u") == 0) {
-            token = strtok_r(NULL, " ", &savePtr);
-            // if missing
-            if (!token) {
+        if (!strcmp(token, "-u")) {
+            if (!(token = strtok_r(NULL, " ", &savePtr))) {
                 break;
             }
             user = token;
-        } else if (strcmp(token, "-m") == 0) {
+        } else if (!strcmp(token, "-m")) {
             // everything after '-m' in savePtr is the message body
             message = savePtr;
             break;
