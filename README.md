@@ -79,7 +79,11 @@ Port      : 60660
 dark: haiii
 dark: clients are not interrupting each other.
 stoney: heh :D
+dark: private -u stoney -m private
+stoney: /list
 Client: dark has disconnected.
+stoney: /list
+Client: stoney has disconnected.
 ```
 
 ---
