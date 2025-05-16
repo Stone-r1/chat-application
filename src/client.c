@@ -79,6 +79,17 @@ int exitCommand(const char* buffer) {
     return 0;
 }
 
+int listCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
+    if (strncmp(buffer, "/list", 5) == 0 && (*bufferLen == 5)) {
+        write(socket, buffer, *bufferLen);
+        *bufferLen = 0;
+        memset(buffer, 0, BUFFERSIZE);
+        write(STDOUT_FILENO, prompt, strlen(prompt));
+        return 1;
+    }
+    return 0;
+}
+
 int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
     char c;
     ssize_t n = read(STDIN_FILENO, &c, 1);
@@ -92,6 +103,10 @@ int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt)
         // === CHAT FUNCTIONS ===
         if (exitCommand(buffer)) {
             return 1;
+        }
+
+        if (listCommand(socket, buffer, bufferLen, prompt)) {
+            return 0;
         }
         // ======================
 

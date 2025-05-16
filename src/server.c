@@ -147,6 +147,39 @@ void disconnectClient(int clientSocket, const char* username) {
     removeClient(clientSocket);
 }
 
+int listCommand(int socket, const char* buffer, int message) {
+    if (strncmp(buffer, "/list", 5) == 0 && (message == 5)) {
+        pthread_mutex_lock(&clientMutex);
+        char userBuffer[BUFFERSIZE];
+        int activeUsers = 0;
+        for (int i = 0; i < MAXUSERS; i++) {
+            if (clientList[i] != NULL) {
+                activeUsers++;
+            } 
+        }
+
+        int offset = snprintf(userBuffer, sizeof(userBuffer), "=== Users online (%d) ===\n", activeUsers);
+        for (int i = 0; i < MAXUSERS; i++) {
+            if (clientList[i] == NULL) continue;
+            offset += snprintf(userBuffer + offset, sizeof(userBuffer) - offset, " - %s\n", clientList[i] -> username);
+        }
+        pthread_mutex_unlock(&clientMutex);
+        write(socket, userBuffer, offset);
+        return 1;
+    }
+    return 0;
+}
+
+void defaultBroadcast(client_t* client, char* buffer, int message) {
+    buffer[message] = '\n';
+    buffer[message + 1] = '\0';
+
+    char fullMessage[MAXUSERNAMELEN + MAXUSERNAMELEN + 4];
+    int len = snprintf(fullMessage, sizeof(fullMessage), "[%s]: %s", client -> username, buffer);
+
+    sendToAllClients(fullMessage, len, client -> username);
+}
+
 void* handleClient(void* arg) {
     client_t* client = (client_t*)arg;
     int clientSocket = client -> sockfd;
@@ -164,13 +197,12 @@ void* handleClient(void* arg) {
         buffer[message] = '\0';
         printf("%s: %.*s\n", client -> username, message, buffer);
 
-        buffer[message] = '\n';
-        buffer[message + 1] = '\0';
-
-        char fullMessage[MAXUSERNAMELEN + MAXUSERNAMELEN + 4];
-        int len = snprintf(fullMessage, sizeof(fullMessage), "[%s]: %s", client -> username, buffer);
-
-        sendToAllClients(fullMessage, len, client -> username);
+        // == User Commands ==
+        if (listCommand(clientSocket, buffer, message)) {
+            continue;
+        } 
+        // ===================
+        defaultBroadcast(client, buffer, message);
     }
 
     disconnectClient(clientSocket, client -> username);
