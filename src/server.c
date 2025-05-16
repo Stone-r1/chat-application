@@ -254,11 +254,11 @@ void* handleClient(void* arg) {
 
         // == User Commands ==
         if (listCommand(clientSocket, buffer, message)) {
-            continue;
+            continue; // /list
         }
 
         if (privateCommand(client, buffer, message)) {
-            continue;
+            continue; // /private -u username -m message
         }
         // ===================
         defaultBroadcast(client, buffer, message);
