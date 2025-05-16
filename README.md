@@ -10,6 +10,7 @@ It's a multithreaded TCP chat server written in C that supports concurrent conne
 - Using `pthread` to handle threaded clients.
 - The use of `pthread_mutex_t` allows for thread-safe client handling.
 - The server and client duties are eloquently separated.
+- Inbuilt chat functions like `/list` and `/private`.
 
 ## Compliation
 
@@ -40,7 +41,14 @@ Enter your username: stoney
 [dark]: haiii
 [dark]: clients are not interrupting each other.
 [stoney]: heh :D
+[PM from dark]: private
+[stoney]: /list
+=== Users online (2) ===
+ - stoney
+ - dark
 Client dark has disconnected.
+=== Users online (1) ===
+ - stoney
 ```
 
 Client-2 Terminal:
@@ -50,6 +58,7 @@ Enter your username: dark
 [dark]: haiii
 [dark]: clients are not interrupting each other.  
 [stoney]: heh :D
+[dark]: /private -u stoney -m private
 [dark]: /exit
 Client Exit...
 ```
