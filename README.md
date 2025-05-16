@@ -47,8 +47,11 @@ Enter your username: stoney
  - stoney
  - dark
 Client dark has disconnected.
+[stoney]: /list
 === Users online (1) ===
  - stoney
+[stoney]: /exit
+Client Exit...
 ```
 
 Client-2 Terminal:
