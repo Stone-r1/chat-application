@@ -77,21 +77,23 @@ void clearBufferRedrawPrompt(char* buffer, size_t* bufferLen, const char* prompt
 }
 
 int exitCommand(const char* buffer) {
-    if (strncmp(buffer, "/exit", 5) == 0) {
-        const char* exitMessage = "Client Exit...\n";
-        write(STDOUT_FILENO, exitMessage, strlen(exitMessage));
-        return 1;
+    if (strncmp(buffer, "/exit", 5) != 0) {
+        return 0;
     }
-    return 0;
+
+    const char* exitMessage = "Client Exit...\n";
+    write(STDOUT_FILENO, exitMessage, strlen(exitMessage));
+    return 1; 
 }
 
 int listCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
-    if (strncmp(buffer, "/list", 5) == 0 && (*bufferLen == 5)) { // change for clarity write != return 0
-        write(socket, buffer, *bufferLen);
-        clearBufferRedrawPrompt(buffer, bufferLen, prompt); 
-        return 1;
+    if (strncmp(buffer, "/list", 5) != 0 || (*bufferLen != 5)) {
+        return 0;
     }
-    return 0;
+
+    write(socket, buffer, *bufferLen);
+    clearBufferRedrawPrompt(buffer, bufferLen, prompt); 
+    return 1;
 }
 
 void validatePrivateMessage(int socket, char* user, char* message) {
