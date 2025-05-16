@@ -70,11 +70,11 @@ void assignConnection(struct sockaddr_in6* addr) {
     freeaddrinfo(res);
 }
 
-/*
-void clearBufferRedrawPrompt() {
-
+void clearBufferRedrawPrompt(char* buffer, size_t* bufferLen, const char* prompt) {
+    *bufferLen = 0;
+    memset(buffer, 0, BUFFERSIZE);
+    write(STDOUT_FILENO, prompt, strlen(prompt));
 }
-*/
 
 int exitCommand(const char* buffer) {
     if (strncmp(buffer, "/exit", 5) == 0) {
@@ -88,9 +88,7 @@ int exitCommand(const char* buffer) {
 int listCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
     if (strncmp(buffer, "/list", 5) == 0 && (*bufferLen == 5)) { // change for clarity write != return 0
         write(socket, buffer, *bufferLen);
-        *bufferLen = 0;
-        memset(buffer, 0, BUFFERSIZE);
-        write(STDOUT_FILENO, prompt, strlen(prompt));
+        clearBufferRedrawPrompt(buffer, bufferLen, prompt); 
         return 1;
     }
     return 0;
@@ -135,9 +133,7 @@ int privateCommand(int socket, char* buffer, size_t* bufferLen, const char* prom
     }
 
     validatePrivateMessage(socket, user, message);
-    *bufferLen = 0;
-    memset(buffer, 0, BUFFERSIZE);
-    write(STDOUT_FILENO, prompt, strlen(prompt));
+    clearBufferRedrawPrompt(buffer, bufferLen, prompt);  
     return 1;
 }
 
@@ -168,9 +164,7 @@ int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt)
             write(socket, buffer, *bufferLen);
         }
 
-        *bufferLen = 0;
-        memset(buffer, 0, BUFFERSIZE);
-        write(STDOUT_FILENO, prompt, strlen(prompt));
+        clearBufferRedrawPrompt(buffer, bufferLen, prompt); 
     } else if (c == 127 || c == '\b') {
         if (*bufferLen) {
             (*bufferLen)--;
