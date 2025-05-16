@@ -70,6 +70,12 @@ void assignConnection(struct sockaddr_in6* addr) {
     freeaddrinfo(res);
 }
 
+/*
+void clearBufferRedrawPrompt() {
+
+}
+*/
+
 int exitCommand(const char* buffer) {
     if (strncmp(buffer, "/exit", 5) == 0) {
         const char* exitMessage = "Client Exit...\n";
@@ -80,7 +86,7 @@ int exitCommand(const char* buffer) {
 }
 
 int listCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
-    if (strncmp(buffer, "/list", 5) == 0 && (*bufferLen == 5)) {
+    if (strncmp(buffer, "/list", 5) == 0 && (*bufferLen == 5)) { // change for clarity write != return 0
         write(socket, buffer, *bufferLen);
         *bufferLen = 0;
         memset(buffer, 0, BUFFERSIZE);
@@ -90,10 +96,54 @@ int listCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt)
     return 0;
 }
 
+void validatePrivateMessage(int socket, char* user, char* message) {
+    if (!user || !message) {
+        const char* usageExample = "Usage: /private -u <username> -m <message>\n";
+        write(STDOUT_FILENO, usageExample, strlen(usageExample));
+    } else {
+        char output[BUFFERSIZE];
+        int n = snprintf(output, BUFFERSIZE, "/private -u %s -m %s", user, message);
+        write(socket, output, n);
+    }
+}
+
+int privateCommand(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
+    if (strncmp(buffer, "/private ", 9) != 0 || (*bufferLen != 9)) {
+        return 0;
+    }
+
+    char* savePtr;
+    char* token = strtok_r(buffer, " ", &savePtr);
+    char* user = NULL;
+    char* message = NULL;
+
+    while (token) {
+        if (strcmp(token, "-u") == 0) {
+            token = strtok_r(NULL, " ", &savePtr);
+            // if missing
+            if (!token) {
+                break;
+            }
+            user = token;
+        } else if (strcmp(token, "-m") == 0) {
+            // everything after '-m' in savePtr is the message body
+            message = savePtr;
+            break;
+        }
+
+        token = strtok_r(NULL, " ", &savePtr);
+    }
+
+    validatePrivateMessage(socket, user, message);
+    *bufferLen = 0;
+    memset(buffer, 0, BUFFERSIZE);
+    write(STDOUT_FILENO, prompt, strlen(prompt));
+    return 1;
+}
+
 int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt) {
     char c;
-    ssize_t n = read(STDIN_FILENO, &c, 1);
-    if (n <= 0) {
+    if ((read(STDIN_FILENO, &c, 1)) <= 0) {
         return 0;
     }
 
@@ -106,6 +156,10 @@ int handleInput(int socket, char* buffer, size_t* bufferLen, const char* prompt)
         }
 
         if (listCommand(socket, buffer, bufferLen, prompt)) {
+            return 0;
+        }
+
+        if (privateCommand(socket, buffer, bufferLen, prompt)) {
             return 0;
         }
         // ======================
